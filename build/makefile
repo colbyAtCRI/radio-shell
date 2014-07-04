@@ -2,7 +2,7 @@ VPATH = ../src
 
 CF = -fmax-errors=2
 
-OBJS = Socket.o Consold.o ConnectionListener.o SdrIQ.o Server.o
+OBJS = Socket.o Consold.o ConnectionListener.o SdrIQ.o Server.o Dsp.o
 
 radio:	$(OBJS)
 	c++ $(CF) -g -o radio $(OBJS) -lfftw3

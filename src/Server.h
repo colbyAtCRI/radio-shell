@@ -62,7 +62,7 @@ struct Server : std::list<pTask>, Task
   void    setIFGain(int g);
   int     getIFGain();
   void    setFilterIndex(int n);
-  string  getName();
+  std::string  getName();
   double  getFirmwareVersion();
   
 };

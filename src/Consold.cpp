@@ -2,7 +2,6 @@
 #include <iostream>
 #include <sstream>
 #include <stdio.h>
-typedef unsigned char MSG;
 
 #include "Dsp.h"
 
