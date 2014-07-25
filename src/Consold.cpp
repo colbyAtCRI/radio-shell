@@ -11,17 +11,58 @@ Consold::Consold(Server *s) : Task(s)
 {
   device = 0;
   prompt();
-  command["freq"] = &Consold::doFrequency;
-  command["quit"] = &Consold::doQuit;
-  command["stat"] = &Consold::doStatus;
-  command["fver"] = &Consold::doFirmwareVersion;
-  command["bver"] = &Consold::doBootVersion;
-  command["run"]  = &Consold::doRun;
-  command["stop"] = &Consold::doStop;
-  command["rf-gain"] = &Consold::doRFGain;
-  command["if-gain"] = &Consold::doIFGain;
-  command["output"] = &Consold::doOutput;
-  command["filter"] = &Consold::doBandwidth;
+  command["freq"]        = &Consold::doFrequency;
+  command["pan"]         = &Consold::doPan;
+  command["quit"]        = &Consold::doQuit;
+  command["stat"]        = &Consold::doStatus;
+  command["fver"]        = &Consold::doFirmwareVersion;
+  command["bver"]        = &Consold::doBootVersion;
+  command["run"]         = &Consold::doRun;
+  command["stop"]        = &Consold::doStop;
+  command["rf-gain"]     = &Consold::doRFGain;
+  command["if-gain"]     = &Consold::doIFGain;
+  command["output"]      = &Consold::doOutput;
+  command["filter"]      = &Consold::doBandwidth;
+  command["baseline"]    = &Consold::doBaseline;
+  command["circularity"] = &Consold::doCircularity;
+  command["switch"]      = &Consold::doSwitch;
+}
+
+Command Consold::doSwitch(Consold::Args &args)
+{
+  if (args.size() == 1)
+    cout << "switch state: " << server->state << endl;
+  else if ( args[1] == "1" || args[1] == "2" ) 
+    server->setSwitchState(args[1][0]);
+  else {
+    cout << "Valid switch states 1 or 2" << endl;
+    cout << "switch state: " << server->state << endl; 
+  }
+  return CONTINUE;
+}
+
+Command Consold::doCircularity(Consold::Args &args)
+{
+   if (args.size() == 1) 
+      cout << "circularity: " << server->circularity << endl;
+   else {
+      stringstream inp(args[1]);
+      inp >> server->circularity;
+   }
+   return CONTINUE;
+}
+
+Command Consold::doBaseline(Consold::Args &args)
+{
+  if ( args.size()==1 )
+    cout << "baseline " << ((server->iqBaseline)?"on":"off") << endl;
+  else if ( args[1] == "on" )
+    server->iqBaseline = true;
+  else if ( args[1] == "off" )
+    server->iqBaseline = false;
+  else 
+    cout << "what? baseline on|off" << endl;
+  return CONTINUE;
 }
 
 // While running the radio can send back 
@@ -62,25 +103,13 @@ Command Consold::doBandwidth(Consold::Args &args)
     cout << "  5 - 100 Khz" << endl;
     cout << "  6 - 150 Khz" << endl;
     cout << "  7 - 190 Khz" << endl;
+    cout << "filter: " << server->filter << " kHz" << endl;
   }
   else {
-    if ( args[1] == "5" )
-      prog6620(cmdBWKHZ_5);
-    else if ( args[1] == "10" )
-      prog6620(cmdBWKHZ_10);
-    else if ( args[1] == "25" )
-      prog6620(cmdBWKHZ_50);
-    else if ( args[1] == "50" )
-      prog6620(cmdBWKHZ_50);
-    else if ( args[1] == "100" )
-      prog6620(cmdBWKHZ_100);
-    else if ( args[1] == "150" )
-      prog6620(cmdBWKHZ_150);
-    else if ( args[1] == "190" )
-      prog6620(cmdBWKHZ_190);
-    else {
-      cout << args[1] << " isn't supported" << endl;
-    }
+    stringstream inp(args[1]);
+    int fi;
+    inp >> fi;
+    server->setFilterIndex(fi);
   }
   return CONTINUE;
 }
@@ -88,8 +117,16 @@ Command Consold::doBandwidth(Consold::Args &args)
 Command Consold::doOutput(Consold::Args &args)
 {
   server->outp = fopen(args[1].c_str(),"w");
+  if ( args.size() == 2 ) 
+    server->fft.nSets = 1000;
+  else {
+    stringstream num(args[2]);
+    num >> server->fft.nSets;
+  }
+    
   return CONTINUE;
 }
+
 Command Consold::doIFGain(Consold::Args &args)
 {
   int ifg[] = {0,6,12,18,24};
@@ -97,20 +134,13 @@ Command Consold::doIFGain(Consold::Args &args)
     cout << "valid settings" << endl;
     for (int k = 0; k < 5; k++)
       cout << "    " << ifg[k] << endl;
-    message msg(cmdGetIFGain);
-    server->send(msg);
-    msg = getReply();
-    int g = (char)msg.data[5];
-    cout << "IF Gain: " << g << " dB" << endl;
+    cout << "IF Gain: " << server->getIFGain() << " dB" << endl;
   }
   else {
-    message msg(cmdSetIFGain);
     stringstream inp(args[1]);
     int n; 
     inp >> n;
-    msg.data[5] = 0xFF & n;
-    server->send(msg);
-    msg = getReply();
+    server->setIFGain(n);
   }
   return CONTINUE;
 }
@@ -118,33 +148,20 @@ Command Consold::doIFGain(Consold::Args &args)
 Command Consold::doRFGain(Consold::Args &args)
 {
   if ( args.size() == 1 ) {
-    message msg(cmdGetRFGain);
-    server->send(msg);
-    msg = getReply();
-    int g = (char)msg.data[5];
-    cout << "RF Gain: " << g << " dB" << endl;
+    cout << "RF Gain: " << server->getRFGain() << " dB" << endl;
   }
   else {
-    message msg(cmdSetRFGain);
     stringstream inp(args[1]);
-    int n; 
-    inp >> n;
-    msg.data[5] = 0xFF & n;
-    server->send(msg);
-    msg = getReply();
+    int gain; 
+    inp >> gain;
+    server->setRFGain(gain);
   }
   return CONTINUE;
 }
 
 Command Consold::doStop(Consold::Args &args)
 {
-  message msg(cmdStop);
-  server->send(msg);
-  msg = getReply();
-  if ( server->outp ) {
-    fclose(server->outp);
-    server->outp = NULL;
-  }
+  server->stop();
   return CONTINUE;
 }
 
@@ -164,6 +181,7 @@ Command Consold::doRun(Consold::Args &args)
     server->send(msg);
     msg = getReply();
   }
+  server->fft.clear();
   return CONTINUE;
 }
 
@@ -208,22 +226,53 @@ Command Consold::doStatus(Consold::Args &args)
 Command Consold::doFrequency(Consold::Args &args)
 {
   if ( args.size() == 1 ) {
-    message msg(cmdGetFreq);
-    server->send(msg);
-    msg = getReply();
-    cout << *(int*)(msg.data+5)/1000000.0 << " MHz" << endl;
+    int ifreq = server->getFrequency();
+    cout << ifreq/1000000.0 << " MHz" << endl;
   }
   else {
-    message msg(cmdSetFreq);
     stringstream num(args[1].c_str());
     double freq;
     num >> freq;
     int ifreq  = (int)1.0E6 * freq;
-    unsigned char *data = (unsigned char *)&ifreq;
-    for (int k = 0; k < 4; k++)
-      msg.data[k+5] = data[k];
-    server->send(msg);
-    msg = getReply();
+    server->setFrequency(ifreq);
+  }
+  return CONTINUE;
+}
+
+Command Consold::doPan(Consold::Args &args)
+{
+  switch (args.size()) {
+  case 1: {
+    cout << "pan to-freq" << endl;
+    cout << "pan to-freq step" << endl;
+    cout << "pan from-freq to-freq step" << endl;
+  }
+    break;
+  case 2: {
+    stringstream tof(args[1]);
+    double xf;
+    int fto, f;
+    int fat = server->getFrequency();
+    int step = 30;
+    tof >> xf;
+    fto = 1000000 * xf;
+    f = fat;
+    if ( fto < fat ) {
+      while (f-step > fto) {
+	f -= step;
+	server->setFrequency(f);
+      }
+      server->setFrequency(fto);
+    }
+    else {
+      while (f+step < fto) {
+	f += step;
+	server->setFrequency(f);
+      }
+      server->setFrequency(fto);
+    }
+  }
+    break;  
   }
   return CONTINUE;
 }

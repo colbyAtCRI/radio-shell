@@ -1,4 +1,5 @@
 #include "Server.h"
+#include "Dsp.h"
 #include "Socket.h"
 #include "Consold.h"
 #include "ConnectionListener.h"
@@ -7,7 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-//#include <ncurses.h>
 
 using namespace std;
 
@@ -23,23 +23,188 @@ Task::Task(Server *s) : server(s)
 }
 
 // Need to open the radio here.
-Server::Server(string name) : Task(this)
+Server::Server(string name,string switchname) : Task(this), fft(2048)
 {
+  iqBaseline = false;
+  circularity = 1.0;
   ndata = 0;
+  dwell = 0;
+  dwellCount = 10;
+  statePeriod = 100;
   outp = NULL;
   device = openUSBdevice(name);
   if ( device < 0 ) { 
     cout << "Unable to open: " << name << endl;
     exit(1);
   }
+  else {
+    setFilterIndex(100);
+    setFrequency(10001000);
+    setIFGain(24);
+    setRFGain(0);
+  }
   if (!getDataSocket("3490")) {
     cout << "can't open datagram socket" << endl;
     exit(1);
+  }
+  rfswitch = openUSBdevice(switchname);
+  if ( rfswitch < 0 ) {
+    cout << "Unable to open Arduino" << endl;
+    state = 'x';
+  } else {
+    setSwitchState('1');
   }
   add(this);
   add(new Consold(this));
   //add(new ConnectionListener(this,"3490"));
   //add(new ConnectionListener(this,"3491"));
+}
+
+void Server::stop()
+{
+  message msg(cmdStop);
+  send(msg);
+  msg = getReply();
+}
+
+void Server::setSwitchState(char c)
+{
+  if ( rfswitch > 0 && (c == '1' || c == '2')) {
+    if ( write(rfswitch,&c,1) != 1 ) { 
+      cerr << "Problem setting switch" << endl;
+    }
+    else {
+      state = c;
+      dwell = dwellCount;
+    }
+  }
+}
+
+void Server::changeState()
+{
+  if ( state == '1' ) {
+    setSwitchState('2');
+  }
+  else {
+    setSwitchState('1');
+  }
+  dwell = dwellCount;
+}
+
+// Most radio commands will get an ack or
+// data back from the radio. However, this
+// reply is often after the current IQ data 
+// block. This function waits for the ack
+// or reply while processing the current IQ 
+// data.
+message Server::getReply()
+{
+  message msg;
+  while (1) {
+    msg = recv();
+    if ( msg.type == 4 )
+      broadcast(msg);
+    else 
+      break;
+  }
+  return msg;
+}
+
+void Server::prog6620(MSG prog[267][9])
+{
+  for (int n = 0; n < 267; n++) {
+    message msg(prog[n]);
+    server->send(msg);
+    msg = getReply();
+  }
+}
+
+void Server::setFrequency(int freq)
+{
+  message msg(cmdSetFreq);
+  MSG *data = (MSG *)&freq;
+  for (int k = 0; k < 4; k++)
+    msg.data[k+5] = data[k];
+  send(msg);
+  msg = getReply();
+}
+
+int Server::getFrequency()
+{
+  message msg(cmdGetFreq);
+  send(msg);
+  msg = getReply();
+  return *(int*)(msg.data+5);
+}
+
+void Server::setIFGain(int gain)
+{
+  message msg(cmdSetIFGain);
+  msg.data[5] = 0xFF & gain;
+  send(msg);
+  msg = getReply();
+}
+
+int Server::getIFGain()
+{
+  message msg(cmdGetIFGain);
+  send(msg);
+  msg = getReply();
+  int g = (char)msg.data[5];
+  return g;
+}
+
+void Server::setRFGain(int gain)
+{
+  message msg(cmdSetRFGain);
+  msg.data[5] = 0xFF & gain;
+  send(msg);
+  msg = getReply();
+}
+
+int Server::getRFGain()
+{
+  message msg(cmdGetRFGain);
+  send(msg);
+  msg = getReply();
+  int gain = (char)msg.data[5];
+  return gain;
+}
+
+void Server::setFilterIndex(int fn)
+{
+  int ifg = getIFGain();
+  switch (fn) {
+  case 5:
+    filter = fn;
+    prog6620(cmdBWKHZ_5);
+    break;
+  case 10:
+    filter = fn;
+    prog6620(cmdBWKHZ_10);
+    break;
+  case 25:
+    filter = fn;
+    prog6620(cmdBWKHZ_50);
+    break;
+  case 50:
+    filter = fn;
+    prog6620(cmdBWKHZ_50);
+    break;
+  case 100:
+    filter = fn;
+    prog6620(cmdBWKHZ_100);
+    break;
+  case 150:
+    filter = fn;
+    prog6620(cmdBWKHZ_150);
+    break;
+  case 190:
+    filter = fn;
+    prog6620(cmdBWKHZ_190);
+    break;
+  }
+  setIFGain(ifg);
 }
 
 // Setup a datagram socket on port, port
@@ -138,18 +303,52 @@ int Server::loop()
   return -1;
 };
 
+/*
 struct Data
 {
   short int I;
   short int Q;
 };
+*/
 
 void Server::broadcast(message msg)
 {
-  Data *data;
+  //Data *data;
   int nb = 0;
+  Data *data = (Data*)(msg.data+2);
+  double IA = 0.0;
+  double QA = 0.0;
+  if ( iqBaseline ) {
+     for (int k = 0; k < 2048; k++) {
+        IA += data[k].I;
+        QA += data[k].Q;
+     }
+     IA /= 2048.0;
+     QA /= 2048.0;
+     for (int k = 0; k < 2048; k++) {
+        data[k].I -= IA;
+        data[k].Q -= QA;
+     } 
+  }
+
+  if ( circularity != 1.0 ) {
+     for (int k = 0; k < 2048; k++) 
+        data[k].Q *= circularity;
+  }
+
+  if (outp != NULL && dwell == 0) {
+    data = (Data*)(msg.data+2);
+    if (fft.addData(state,data,2048)) {
+      for (int n = 0; n < 2048; n++)
+	fprintf(outp,"%f %f\n",fft.spectra1[n],fft.spectra2[n]);
+      cout << "data done" << endl; 
+      fclose(outp);
+      outp = NULL;
+      stop();
+    }
+  }
+
   while (1) {
-    if ( outp == NULL ) {
     nb += sendto(data_socket,
 		 msg.data+nb,
 		 msg.length-nb,
@@ -158,14 +357,8 @@ void Server::broadcast(message msg)
 		 info->ai_addrlen);
     if ( nb >= msg.length )
       break;
-    }
-    else {
-      data = (Data*)(msg.data+2);
-      for (int n = 0; n < 2048; n++)
-	fprintf(outp,"%d %d\n",data[n].I,data[n].Q);
-      break;
-    }
   }
+
 }
 // This is called when the sdrIQ says something
 // which is not a response to a direct user 
@@ -176,7 +369,11 @@ Command Server::run()
   msg = recv();
   if ( msg.type == 4 ) {
     ndata++;
+    while (dwell > 0)
+      dwell--;
     broadcast(msg);
+    if ( ndata % 100 == 0 )
+      changeState();
   }
   if ( msg.type == 1 ) {
     ndata = 0;
@@ -206,7 +403,7 @@ message Server::recv()
 int
 main()
 {
-  Server  server("/dev/ttyUSB0");
+  Server  server("/dev/ttyUSB0","/dev/ttyACM0");
   server.loop();
   return 0;
 }

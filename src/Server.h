@@ -1,6 +1,7 @@
 #ifndef __MYSERVER__
 #define __MYSERVER__
 #include "SdrIQ.h"
+#include "FFT.h"
 #include <list>
 #include <string>
 #include <unistd.h>
@@ -44,25 +45,45 @@ struct Server : std::list<pTask>, Task
 {
   unsigned long    ndata;
   int              data_socket;
+  int              rfswitch;
+  char             state;
+  int              dwellCount;
+  int              dwell;
+  int              statePeriod;
   struct addrinfo *info;
   FILE            *outp;
+  int              filter;
 
-  Server(std::string name);
+  bool             iqBaseline;
+  double           circularity;
+
+  FFT              fft;
+
+  Server(std::string name,std::string sname);
 
   bool    getDataSocket(std::string port);
   void    add(pTask tsk);
   Command run();
   int     loop();
+  void    setSwitchState(char);
+  void    changeState();
+  message getReply();
   void    broadcast(message msg);
   bool    send(message msg);
   message recv();
 
+  void    prog6620(MSG msg[267][9]);
   void    setFrequency(int freq);
-  double  getFrequency();
+  int     getFrequency();
   void    setIFGain(int g);
   int     getIFGain();
+  void    setRFGain(int gain);
+  int     getRFGain();
   void    setFilterIndex(int n);
+  void    stop();
+
   std::string  getName();
+
   double  getFirmwareVersion();
   
 };
