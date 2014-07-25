@@ -81,6 +81,10 @@ struct Server : std::list<pTask>, Task
   int     getRFGain();
   void    setFilterIndex(int n);
   void    stop();
+  void    runFree();
+  void    runN(int n);
+  int     status();
+
 
   std::string  getName();
 

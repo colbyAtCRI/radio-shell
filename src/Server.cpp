@@ -60,6 +60,29 @@ Server::Server(string name,string switchname) : Task(this), fft(2048)
   //add(new ConnectionListener(this,"3491"));
 }
 
+void Server::runFree()
+{
+  message msg(cmdFreeRun);
+  server->send(msg);
+  msg = getReply();
+}
+
+void Server::runN(int ns)
+{
+  message msg(cmdGetN);
+  msg.data[7] = ns;
+  server->send(msg);
+  msg = getReply();
+}
+
+int Server::status()
+{
+  message msg(cmdStatus);
+  server->send(msg);
+  msg = getReply();
+  return msg.data[4]-11;
+}
+
 void Server::stop()
 {
   message msg(cmdStop);

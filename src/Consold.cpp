@@ -168,18 +168,13 @@ Command Consold::doStop(Consold::Args &args)
 Command Consold::doRun(Consold::Args &args)
 {
   if ( args.size() == 1 ) {
-    message msg(cmdFreeRun);
-    server->send(msg);
-    msg = getReply();
+    server->runFree();
   }
   else {
-    message msg(cmdGetN);
     stringstream inp(args[1]);
     int N;
     inp >> N;
-    msg.data[7] = N;
-    server->send(msg);
-    msg = getReply();
+    server->runN(N);
   }
   server->fft.clear();
   return CONTINUE;
@@ -207,7 +202,7 @@ Command Consold::doBootVersion(Consold::Args &args)
 
 const
 char *Status[] = {"Idle",
-	 	  "Busy",
+	 	  "Running",
 		  "Loading AD6620",
 		  "Boot Mode Idle",
 		  "Boot Mode Busy",
@@ -216,10 +211,9 @@ char *Status[] = {"Idle",
 
 Command Consold::doStatus(Consold::Args &args)
 {
-  message msg(cmdStatus);
-  server->send(msg);
-  msg = getReply();
-  cout << "status: " << Status[msg.data[4]-11] << endl;
+  int n = server->status();
+  if ( n > -1 && n < 7 )
+    cout << "status: " << Status[n] << endl;
   return CONTINUE;
 }
 
