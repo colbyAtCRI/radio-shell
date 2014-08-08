@@ -224,10 +224,16 @@ Command Consold::doFrequency(Consold::Args &args)
     cout << ifreq/1000000.0 << " MHz" << endl;
   }
   else {
-    stringstream num(args[1].c_str());
+    int ifreq;
+    stringstream num(args[1]);
     double freq;
     num >> freq;
-    int ifreq  = (int)1.0E6 * freq;
+    if ( args[1][0] == '+' || args[1][0] == '-') {
+       ifreq = server->getFrequency() + (int)1.0E6*freq;
+    }
+    else {
+       ifreq  = (int)1.0E6 * freq;
+    }
     server->setFrequency(ifreq);
   }
   return CONTINUE;
