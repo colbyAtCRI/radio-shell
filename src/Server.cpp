@@ -33,7 +33,7 @@ Server::Server(string name,string switchname) : Task(this), fft(2048)
   statePeriod = 100;
   outp = NULL;
   device = openUSBdevice(name);
-  if ( device < 0 ) { 
+  if ( device < 0 ) {
     cout << "Unable to open: " << name << endl;
     exit(1);
   }
@@ -93,7 +93,7 @@ void Server::stop()
 void Server::setSwitchState(char c)
 {
   if ( rfswitch > 0 && (c == '1' || c == '2')) {
-    if ( write(rfswitch,&c,1) != 1 ) { 
+    if ( write(rfswitch,&c,1) != 1 ) {
       cerr << "Problem setting switch" << endl;
     }
     else {
@@ -116,9 +116,9 @@ void Server::changeState()
 
 // Most radio commands will get an ack or
 // data back from the radio. However, this
-// reply is often after the current IQ data 
+// reply is often after the current IQ data
 // block. This function waits for the ack
-// or reply while processing the current IQ 
+// or reply while processing the current IQ
 // data.
 message Server::getReply()
 {
@@ -127,7 +127,7 @@ message Server::getReply()
     msg = recv();
     if ( msg.type == 4 )
       broadcast(msg);
-    else 
+    else
       break;
   }
   return msg;
@@ -279,17 +279,17 @@ int Server::loop()
 
   // Main server loop
   while (running) {
-    
-    FD_ZERO(&rds); 
 
-    // Each task has its own device to read from. 
-    // If the device number is negative erase the 
+    FD_ZERO(&rds);
+
+    // Each task has its own device to read from.
+    // If the device number is negative erase the
     // task;
     for (task = begin(); task != end(); task++) {
       if ( (*task)->device < 0 ) {
-	delete *task;
-	erase(task);
-	continue;
+        delete *task;
+        erase(task);
+        continue;
       }
       maxdev = max(maxdev,(*task)->device);
       FD_SET((*task)->device,&rds);
@@ -307,8 +307,8 @@ int Server::loop()
     // Run the task that has input ready for reading
     for (task = begin(); task != end(); task++) {
       if ( FD_ISSET((*task)->device,&rds) ) {
-	cmd = (*task)->run();
-	break;
+        cmd = (*task)->run();
+        break;
       }
     }
 
@@ -322,9 +322,9 @@ int Server::loop()
       break;
     }
   }
-  
+
   return -1;
-};
+}
 
 /*
 struct Data
@@ -351,11 +351,11 @@ void Server::broadcast(message msg)
      for (int k = 0; k < 2048; k++) {
         data[k].I -= IA;
         data[k].Q -= QA;
-     } 
+     }
   }
 
   if ( circularity != 1.0 ) {
-     for (int k = 0; k < 2048; k++) 
+     for (int k = 0; k < 2048; k++)
         data[k].Q *= circularity;
   }
 
@@ -363,8 +363,8 @@ void Server::broadcast(message msg)
     data = (Data*)(msg.data+2);
     if (fft.addData(state,data,2048)) {
       for (int n = 0; n < 2048; n++)
-	fprintf(outp,"%f %f\n",fft.spectra1[n],fft.spectra2[n]);
-      cout << "data done" << endl; 
+        fprintf(outp,"%f %f\n",fft.spectra1[n],fft.spectra2[n]);
+      cout << "data done" << endl;
       fclose(outp);
       outp = NULL;
       stop();
@@ -373,18 +373,18 @@ void Server::broadcast(message msg)
 
   while (1) {
     nb += sendto(data_socket,
-		 msg.data+nb,
-		 msg.length-nb,
-		 0,
-		 info->ai_addr,
-		 info->ai_addrlen);
+     msg.data+nb,
+     msg.length-nb,
+     0,
+     info->ai_addr,
+     info->ai_addrlen);
     if ( nb >= msg.length )
       break;
   }
 
 }
 // This is called when the sdrIQ says something
-// which is not a response to a direct user 
+// which is not a response to a direct user
 // command
 Command Server::run()
 {
@@ -410,11 +410,11 @@ Command Server::run()
 
 // Every task has a pointer to the server
 // so it can send messages and receive Acks
-bool Server::send(message msg) 
+bool Server::send(message msg)
 {
-  if ( device > 0 ) 
+  if ( device > 0 )
     return sendMessage(device,msg);
-  else 
+  else
     return false;
 }
 
